@@ -13,61 +13,47 @@ const readExcelFile = (filePath) => {
 };
 
 // Function to wait for the page to fully load and close cookie dialogs
-const ensurePageLoaded = async (page, url, folderName) => {
+const ensurePageLoaded = async (page) => {
   // Wait for the body to load
   await page.waitForSelector("body", { timeout: 60000 });
 
   // Wait for any network activity to finish
-  await new Promise((resolve) => setTimeout(resolve, 2000)); // Give the page some extra time to stabilize
+  await new Promise((resolve) => setTimeout(resolve, 3000)); // Give the page some extra time to stabilize
 
-  // Remove cookie consent dialogs and specific elements
+  // Try to close cookie consent dialogs and remove specific elements
   await page.evaluate(() => {
     const cookieSelectors = [
-      'div[role="alertdialog"]',
-      "div#onetrust-banner-sdk",
-      "div.otFloatingFlat.ot-bottom-left.ot-wo-title",
-      '[aria-label="Cookie banner"]',
+      'div[role="alertdialog"]', // Generic dialog
+      "div#onetrust-banner-sdk", // ID for cookie consent
+      "div.otFloatingFlat.ot-bottom-left.ot-wo-title", // Class for cookie banner
+      '[aria-label="Cookie banner"]', // Aria label
     ];
 
+    // Remove generic cookie banners
     cookieSelectors.forEach((selector) => {
       const element = document.querySelector(selector);
       if (element) {
-        element.style.display = "none";
+        element.style.display = "none"; // Hide the element
       }
     });
-  });
 
-  // Capture specificDiv and specificDiv2 if they exist
-  const specificDivScreenshot = async (selector, filename) => {
-    const element = await page.$(selector); // Get the element
-    if (element) {
-      const boundingBox = await element.boundingBox(); // Get dimensions
-      if (boundingBox) {
-        await page.screenshot({
-          path: filename,
-          clip: boundingBox, // Screenshot only the specific element
-        });
-        console.log(`Screenshot of ${selector} saved to ${filename}`);
-      }
-    } else {
-      console.log(`Element ${selector} not found on ${url}`);
+    // Remove the specific div by class name
+    const specificDiv = document.querySelector(".ot-sdk-container");
+    const specificDiv2 = document.querySelector(
+      ".isi-experiencefragment.experiencefragment.aem-GridColumn.aem-GridColumn--default--12"
+    );
+
+    if (specificDiv) {
+      specificDiv.remove(); // Remove the specific div
     }
-  };
-
-  // File paths for specificDiv and specificDiv2 screenshots
-  const specificDivFilePath = path.join(folderName, "isi1.png");
-  const specificDiv2FilePath = path.join(folderName, "isi2.png");
-
-  // Capture screenshots of specificDiv and specificDiv2
-  await specificDivScreenshot(".ot-sdk-container", specificDivFilePath);
-  await specificDivScreenshot(
-    ".isi-experiencefragment.experiencefragment.aem-GridColumn.aem-GridColumn--default--12",
-    specificDiv2FilePath
-  );
+    if (specificDiv2) {
+      specificDiv2.remove(); // Remove the specific div
+    }
+  });
 };
 
 // Function to take screenshots
-const takeScreenshot = async (url, viewPort, filePath, folderName) => {
+const takeScreenshot = async (url, viewPort, filePath) => {
   const browser = await puppeteer.launch();
   const page = await browser.newPage();
 
@@ -79,7 +65,7 @@ const takeScreenshot = async (url, viewPort, filePath, folderName) => {
     await page.goto(url, { waitUntil: "networkidle2", timeout: 60000 });
 
     // Ensure the page is loaded and handle cookies
-    await ensurePageLoaded(page, url, folderName);
+    await ensurePageLoaded(page);
 
     // Take full-page screenshot
     await page.screenshot({ path: filePath, fullPage: true });
@@ -93,21 +79,18 @@ const takeScreenshot = async (url, viewPort, filePath, folderName) => {
 
 // Function to handle screenshots for all URLs
 const captureScreenshots = async (urls) => {
-  const desktopViewPort = { width: 1280, height: 800 };
-  const mobileViewPort = { width: 375, height: 667 };
-  const tabletViewPort = { width: 768, height: 1024 };
+  const desktopViewPort = { width: 1440, height: 900 };
+  const mobileViewPort = { width: 425, height: 546 };
+  const tabletViewPort = { width: 768, height: 546 };
 
   // Get current date and time for folder name
   const now = new Date();
-  const folderName = path.join(
-    __dirname,
-    "screenshots",
-    now.toISOString().replace(/:/g, "-")
-  ); // Replace ':' with '-' for valid folder name
+  const folderName = now.toISOString().replace(/:/g, "-"); // Replace ':' with '-' for valid folder name
 
   // Create folder by date and time
-  if (!fs.existsSync(folderName)) {
-    fs.mkdirSync(folderName, { recursive: true });
+  const baseDir = path.join(__dirname, "screenshots", folderName);
+  if (!fs.existsSync(baseDir)) {
+    fs.mkdirSync(baseDir, { recursive: true });
   }
 
   // Loop through each URL
@@ -115,29 +98,29 @@ const captureScreenshots = async (urls) => {
     const fileName =
       url.replace(/^https?:\/\//, "").replace(/\//g, "_") + ".png";
 
-    const desktopFilePath = path.join(folderName, "desktop", fileName);
-    const mobileFilePath = path.join(folderName, "mobile", fileName);
-    const tabletFilePath = path.join(folderName, "tablet", fileName);
+    const desktopFilePath = path.join(baseDir, "desktop", fileName);
+    const mobileFilePath = path.join(baseDir, "mobile", fileName);
+    const tabletFilePath = path.join(baseDir, "tablet", fileName);
 
     // Ensure folders for each device type exist
-    if (!fs.existsSync(path.join(folderName, "desktop"))) {
-      fs.mkdirSync(path.join(folderName, "desktop"));
+    if (!fs.existsSync(path.join(baseDir, "desktop"))) {
+      fs.mkdirSync(path.join(baseDir, "desktop"));
     }
-    if (!fs.existsSync(path.join(folderName, "mobile"))) {
-      fs.mkdirSync(path.join(folderName, "mobile"));
+    if (!fs.existsSync(path.join(baseDir, "mobile"))) {
+      fs.mkdirSync(path.join(baseDir, "mobile"));
     }
-    if (!fs.existsSync(path.join(folderName, "tablet"))) {
-      fs.mkdirSync(path.join(folderName, "tablet"));
+    if (!fs.existsSync(path.join(baseDir, "tablet"))) {
+      fs.mkdirSync(path.join(baseDir, "tablet"));
     }
 
     console.log(`Taking screenshot for desktop view of: ${url}`);
-    await takeScreenshot(url, desktopViewPort, desktopFilePath, folderName);
+    await takeScreenshot(url, desktopViewPort, desktopFilePath);
 
     console.log(`Taking screenshot for mobile view of: ${url}`);
-    await takeScreenshot(url, mobileViewPort, mobileFilePath, folderName);
+    await takeScreenshot(url, mobileViewPort, mobileFilePath);
 
     console.log(`Taking screenshot for tablet view of: ${url}`);
-    await takeScreenshot(url, tabletViewPort, tabletFilePath, folderName);
+    await takeScreenshot(url, tabletViewPort, tabletFilePath);
   }
 };
 
