@@ -79,6 +79,7 @@ const takeScreenshot = async (url, viewPort, filePath) => {
 
 // Function to handle screenshots for all URLs
 const captureScreenshots = async (urls) => {
+  console.time("Total Process Time"); // Start timer
   const desktopViewPort = { width: 1440, height: 900 };
   const mobileViewPort = { width: 425, height: 546 };
   const tabletViewPort = { width: 768, height: 546 };
@@ -122,6 +123,8 @@ const captureScreenshots = async (urls) => {
     console.log(`Taking screenshot for tablet view of: ${url}`);
     await takeScreenshot(url, tabletViewPort, tabletFilePath);
   }
+
+  console.timeEnd("Total Process Time"); // End timer and log elapsed time
 };
 
 // Main execution
