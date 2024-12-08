@@ -101,7 +101,9 @@ const takeScreenshot = async (url, viewport, filePath) => {
 
   const browser = await puppeteer.launch({
     headless: true,
-    args: ["--no-sandbox", "--disable-setuid-sandbox"], // Required for most cloud environments
+    args: ["--no-sandbox", "--disable-setuid-sandbox"],
+    executablePath: puppeteer.executablePath()
+     // Required for most cloud environments
   });
   const page = await browser.newPage();
 
