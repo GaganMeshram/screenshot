@@ -51,6 +51,7 @@
       const logMessage = document.createElement("p");
       logMessage.innerHTML = message;
       logContainer.appendChild(logMessage);
+      logContainer.scrollTop = logContainer.scrollHeight; // Scroll to the latest log
     });
   </script>
 </body>
