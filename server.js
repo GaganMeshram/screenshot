@@ -7,6 +7,8 @@ const path = require("path");
 const http = require("http");
 const { Server } = require("socket.io");
 const archiver = require("archiver");
+const { stdout, stderr } = require("process");
+require('dotenv').config()
 
 // Setup Express and Server
 const app = express();
@@ -36,6 +38,15 @@ const getEstimatedTime = (urlPairs) => {
   const estimatedTime = numUrls * numDevices * estimatedTimePerURL; // In seconds
   return estimatedTime;
 };
+
+// const exec = require('child_process').exec
+// exec('whereis google-chrome-stable', (err, stdout, stderr)=>{
+//   if(err){
+//     console.error('Error:', err);
+//     return
+//   }
+//   console.log('Google chrome path:', stdout)
+// })
 
 // Function to read Excel file
 const readExcelFile = (filePath) => {
@@ -95,12 +106,14 @@ const captureForAllViewports = async (url, dir, language) => {
   }
 };
 
+console.log('Env:', process.env.CHROME_EXECUTABLE_PATH)
+
 // Function to take a screenshot with Puppeteer and ensure page loading
 const takeScreenshot = async (url, viewport, filePath) => {
   const startTime = Date.now();
 
   const browser = await puppeteer.launch({
-    // executablePath: '/usr/bin/chromium',
+    executablePath: process.env.CHROME_EXECUTABLE_PATH || '/usr/bin/chromium-browser',
     headless: true,
     args: ["--no-sandbox", "--disable-setuid-sandbox"]
      // Required for most cloud environments
