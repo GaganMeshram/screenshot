@@ -1,71 +1,56 @@
+<!-- public/index.html -->
 <!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Screenshot Process</title>
-  <script src="/socket.io/socket.io.js"></script>
+  <title>Screenshot Capture</title>
+  <link rel="stylesheet" href="styles.css">
 </head>
 <body>
-  <h1>Screenshot Process</h1>
-  <form id="uploadForm" enctype="multipart/form-data">
-    <label for="file">Upload Excel File:</label>
-    <input type="file" name="file" id="file" accept=".xlsx" required />
-    <button type="submit">Start Process</button>
-  </form>
-
-  <div id="logs">
-    <h2>Logs:</h2>
-    <div id="logContainer"></div>
+  <div class="container">
+    <h1>Screenshot Capture Tool</h1>
+    <div class="upload-section">
+      <form id="uploadForm" enctype="multipart/form-data">
+        <input type="file" name="file" accept=".xlsx" required>
+        <button type="submit">Start Process</button>
+      </form>
+    </div>
+    <div id="log">
+      <h3>Logs:</h3>
+      <p>Waiting for file upload...</p>
+    </div>
   </div>
 
-  <div id="downloadLink" style="display: none;">
-    <h2>Download Screenshots:</h2>
-    <a id="downloadButton" href="#" target="_blank">Download ZIP</a>
-  </div>
-
+  <script src="/socket.io/socket.io.js"></script>
   <script>
     const socket = io();
-    const uploadForm = document.getElementById("uploadForm");
-    const logContainer = document.getElementById("logContainer");
-    const downloadLink = document.getElementById("downloadLink");
-    const downloadButton = document.getElementById("downloadButton");
 
-    // Listen for form submission
-    uploadForm.addEventListener("submit", (event) => {
-      event.preventDefault(); // Prevent default form submission
+    // Handling form submission via AJAX
+    const form = document.getElementById("uploadForm");
+    form.addEventListener("submit", async (event) => {
+      event.preventDefault();  // Prevent the default form submission (page redirection)
 
-      const formData = new FormData(uploadForm);
-      
-      // Send the form data to the server
-      fetch("/start", {
+      const formData = new FormData(form);  // Create FormData object with file data
+
+      // Send the form data to the server via POST request
+      const response = await fetch("/start", {
         method: "POST",
         body: formData,
-      })
-        .then((response) => response.text())
-        .then((message) => {
-          const logEntry = document.createElement("p");
-          logEntry.textContent = message;
-          logContainer.appendChild(logEntry);
-        })
-        .catch((error) => {
-          const logEntry = document.createElement("p");
-          logEntry.textContent = `Error: ${error.message}`;
-          logContainer.appendChild(logEntry);
-        });
+      });
+
+      if (response.ok) {
+        socket.emit("log", "File uploaded successfully. Process started.");
+      } else {
+        socket.emit("log", "Error uploading file.");
+      }
     });
 
-    // Listen for logs from the backend via Socket.io
     socket.on("log", (message) => {
-      const logEntry = document.createElement("p");
-      logEntry.textContent = message;
-      logContainer.appendChild(logEntry);
-    });
-
-    // Show download link when ZIP is ready
-    socket.on("zipReady", (zipPath) => {
-      downloadLink.style.display = "block";
-      downloadButton.href = `/download?path=${encodeURIComponent(zipPath)}`;
+      const logContainer = document.getElementById("log");
+      const logMessage = document.createElement("p");
+      logMessage.innerHTML = message;
+      logContainer.appendChild(logMessage);
     });
   </script>
 </body>

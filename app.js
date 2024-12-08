@@ -6,7 +6,7 @@ const fs = require("fs");
 const path = require("path");
 const http = require("http");
 const { Server } = require("socket.io");
-const archiver = require("archiver"); // For zipping folders
+const archiver = require("archiver");
 
 // Setup Express and Server
 const app = express();
@@ -18,6 +18,15 @@ const upload = multer({ dest: "uploads/" });
 
 // Serve frontend
 app.use(express.static(path.join(__dirname, "public")));
+
+// Track connected clients
+let socketConnection = null;
+
+io.on("connection", (socket) => {
+  console.log("Client connected.");
+  socketConnection = socket; // Save the socket instance for emitting logs
+  socket.emit("log", "Connected to server.");
+});
 
 // Function to read Excel file
 const readExcelFile = (filePath) => {
@@ -31,63 +40,64 @@ const readExcelFile = (filePath) => {
   }));
 };
 
-// Function to handle Puppeteer screenshot process
-const captureScreenshots = async (urlPairs, socket) => {
-  const desktopViewPort = { width: 1440, height: 900 };
-
-  // Create directories for saving screenshots
-  const now = new Date();
-  const folderName = now.toISOString().replace(/:/g, "-");
-  const baseDir = path.join(__dirname, "screenshots", folderName);
-  const enDir = path.join(baseDir, "EN");
-  const esDir = path.join(baseDir, "ES");
-
-  fs.mkdirSync(enDir, { recursive: true });
-  fs.mkdirSync(esDir, { recursive: true });
-
-  const startTime = Date.now();
-
-  for (const { enUrl, esUrl } of urlPairs) {
-    try {
-      if (enUrl) {
-        const enFileName = enUrl.replace(/^https?:\/\//, "").replace(/\//g, "_") + ".png";
-        const enPath = path.join(enDir, enFileName);
-
-        socket.emit("log", `Capturing EN screenshot: ${enUrl}`);
-        await takeScreenshot(enUrl, desktopViewPort, enPath);
-      }
-
-      if (esUrl) {
-        const esFileName = esUrl.replace(/^https?:\/\//, "").replace(/\//g, "_") + ".png";
-        const esPath = path.join(esDir, esFileName);
-
-        socket.emit("log", `Capturing ES screenshot: ${esUrl}`);
-        await takeScreenshot(esUrl, desktopViewPort, esPath);
-      }
-    } catch (error) {
-      console.error(`Error capturing screenshot: ${error.message}`);
-      socket.emit("log", `Error capturing screenshot: ${error.message}`);
-    }
-  }
-
-  const endTime = Date.now();
-  const timeTaken = ((endTime - startTime) / 60000).toFixed(2); // Time in seconds
-  socket.emit("log", `Screenshot process completed in ${timeTaken} minutes.`);
-
-  // Send zip file path to frontend for download
-  const zipPath = await zipFolder(baseDir);
-  socket.emit("zipReady", zipPath);
+// Viewport configurations for desktop, mobile, and tablet
+const viewports = {
+  desktop: { width: 1440, height: 900 },
+  tablet: { width: 768, height: 1024 },
+  mobile: { width: 375, height: 812 },
 };
 
-// Function to take a screenshot with Puppeteer
-const takeScreenshot = async (url, viewPort, filePath) => {
+// Function to wait for the page to fully load and close cookie dialogs
+const ensurePageLoaded = async (page) => {
+  await page.waitForSelector("body", { timeout: 60000 });
+  await new Promise((resolve) => setTimeout(resolve, 3000)); // Stabilization delay
+
+  await page.evaluate(() => {
+    const unwantedSelectors = [
+      ".ot-sdk-container",
+      ".isi-experiencefragment.experiencefragment.aem-GridColumn.aem-GridColumn--default--12",
+      ".cope-core-isi-header-bar.cope-core-isi-header-bar-Rybelsus-Consumer-ISI--Spanish",
+    ];
+
+    unwantedSelectors.forEach((selector) => {
+      const element = document.querySelector(selector);
+      if (element) element.remove();
+    });
+  });
+};
+
+// Function to take screenshots for desktop, tablet, and mobile views
+const captureForAllViewports = async (url, dir, language) => {
+  for (const [device, viewport] of Object.entries(viewports)) {
+    const deviceDir = path.join(dir, device); // Create a subfolder for each device
+    if (!fs.existsSync(deviceDir)) fs.mkdirSync(deviceDir, { recursive: true });
+
+    const fileName = `${url
+      .replace(/^https?:\/\//, "")
+      .replace(/\//g, "_")}_${device}.png`;
+    const filePath = path.join(deviceDir, fileName);
+
+    if (socketConnection) socketConnection.emit("log", `Capturing ${device} view for ${language}: ${url}`);
+    await takeScreenshot(url, viewport, filePath);
+  }
+};
+
+// Function to take a screenshot with Puppeteer and ensure page loading
+const takeScreenshot = async (url, viewport, filePath) => {
   const browser = await puppeteer.launch();
   const page = await browser.newPage();
 
-  await page.setViewport(viewPort);
+  await page.setViewport(viewport);
   try {
     await page.goto(url, { waitUntil: "networkidle2", timeout: 60000 });
+    await ensurePageLoaded(page); // Ensure the page is loaded and unwanted elements are removed
+
     await page.screenshot({ path: filePath, fullPage: true });
+    // Commented out for now, as requested.
+    // if (socketConnection) socketConnection.emit("log", `Screenshot captured successfully for: ${url}`);
+  } catch (error) {
+    if (socketConnection) socketConnection.emit("log", `Failed to capture screenshot for ${url}: ${error.message}`);
+    console.error(`Failed to capture screenshot for ${url}:`, error);
   } finally {
     await browser.close();
   }
@@ -114,14 +124,27 @@ app.post("/start", upload.single("file"), (req, res) => {
   const filePath = req.file.path;
   const urls = readExcelFile(filePath);
 
-  io.once("connection", (socket) => {
-    console.log("Client connected.");
-    socket.emit("log", "Starting screenshot process...");
-    captureScreenshots(urls, socket).catch((err) => {
-      console.error(`Process error: ${err.message}`);
-      socket.emit("log", `Process error: ${err.message}`);
-    });
-  });
+  if (socketConnection) socketConnection.emit("log", "Starting screenshot process...");
+
+  (async () => {
+    const folderName = `screenshots_${new Date().toISOString().replace(/:/g, "-")}`;
+    const screenshotsDir = path.join(__dirname, folderName);
+    const enDir = path.join(screenshotsDir, "EN");
+    const esDir = path.join(screenshotsDir, "ES");
+
+    // Create directories for EN and ES, as well as subfolders for devices
+    fs.mkdirSync(enDir, { recursive: true });
+    fs.mkdirSync(esDir, { recursive: true });
+
+    // Process URLs for EN and ES
+    for (const { enUrl, esUrl } of urls) {
+      if (enUrl) await captureForAllViewports(enUrl, enDir, "EN");
+      if (esUrl) await captureForAllViewports(esUrl, esDir, "ES");
+    }
+
+    const zipPath = await zipFolder(screenshotsDir);
+    if (socketConnection) socketConnection.emit("log", `Process completed. <a href="/download?path=${zipPath}" target="_blank">Download Screenshots</a>`);
+  })();
 
   res.send("Process started. Check the logs below.");
 });
