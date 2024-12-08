@@ -1,0 +1,72 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Screenshot Process</title>
+  <script src="/socket.io/socket.io.js"></script>
+</head>
+<body>
+  <h1>Screenshot Process</h1>
+  <form id="uploadForm" enctype="multipart/form-data">
+    <label for="file">Upload Excel File:</label>
+    <input type="file" name="file" id="file" accept=".xlsx" required />
+    <button type="submit">Start Process</button>
+  </form>
+
+  <div id="logs">
+    <h2>Logs:</h2>
+    <div id="logContainer"></div>
+  </div>
+
+  <div id="downloadLink" style="display: none;">
+    <h2>Download Screenshots:</h2>
+    <a id="downloadButton" href="#" target="_blank">Download ZIP</a>
+  </div>
+
+  <script>
+    const socket = io();
+    const uploadForm = document.getElementById("uploadForm");
+    const logContainer = document.getElementById("logContainer");
+    const downloadLink = document.getElementById("downloadLink");
+    const downloadButton = document.getElementById("downloadButton");
+
+    // Listen for form submission
+    uploadForm.addEventListener("submit", (event) => {
+      event.preventDefault(); // Prevent default form submission
+
+      const formData = new FormData(uploadForm);
+      
+      // Send the form data to the server
+      fetch("/start", {
+        method: "POST",
+        body: formData,
+      })
+        .then((response) => response.text())
+        .then((message) => {
+          const logEntry = document.createElement("p");
+          logEntry.textContent = message;
+          logContainer.appendChild(logEntry);
+        })
+        .catch((error) => {
+          const logEntry = document.createElement("p");
+          logEntry.textContent = `Error: ${error.message}`;
+          logContainer.appendChild(logEntry);
+        });
+    });
+
+    // Listen for logs from the backend via Socket.io
+    socket.on("log", (message) => {
+      const logEntry = document.createElement("p");
+      logEntry.textContent = message;
+      logContainer.appendChild(logEntry);
+    });
+
+    // Show download link when ZIP is ready
+    socket.on("zipReady", (zipPath) => {
+      downloadLink.style.display = "block";
+      downloadButton.href = `/download?path=${encodeURIComponent(zipPath)}`;
+    });
+  </script>
+</body>
+</html>
