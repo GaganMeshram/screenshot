@@ -113,7 +113,7 @@ const takeScreenshot = async (url, viewport, filePath) => {
   const startTime = Date.now();
 
   const browser = await puppeteer.launch({
-    executablePath: process.env.CHROME_EXECUTABLE_PATH || '/usr/local/bin/chromium-browser',
+    // executablePath: process.env.CHROME_EXECUTABLE_PATH || '/usr/local/bin/chromium-browser',
     headless: true,
     args: ["--no-sandbox", "--disable-setuid-sandbox"]
      // Required for most cloud environments
