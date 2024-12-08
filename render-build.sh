@@ -1,6 +1,7 @@
 #!/bin/bash
 apt-get update
 apt-get install -y \
+  chromium \
   libnss3 \
   libxss1 \
   libasound2 \
