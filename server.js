@@ -99,7 +99,10 @@ const captureForAllViewports = async (url, dir, language) => {
 const takeScreenshot = async (url, viewport, filePath) => {
   const startTime = Date.now();
 
-  const browser = await puppeteer.launch();
+  const browser = await puppeteer.launch({
+    headless: true,
+    args: ["--no-sandbox", "--disable-setuid-sandbox"], // Required for most cloud environments
+  });
   const page = await browser.newPage();
 
   await page.setViewport(viewport);
@@ -164,7 +167,10 @@ app.post("/start", upload.single("file"), (req, res) => {
     // Get the estimated time
     const estimatedTime = getEstimatedTime(urls);
     if (socketConnection)
-      socketConnection.emit("log", `Estimated time: ${estimatedTime*2/60} minutes.`);
+      socketConnection.emit(
+        "log",
+        `Estimated time: ${(estimatedTime * 2) / 60} minutes.`
+      );
 
     const startTime = Date.now();
 
@@ -200,7 +206,8 @@ app.get("/download", (req, res) => {
   }
 });
 
+const port = process.env.PORT || 3000;
 // Start server
-server.listen(3000, () => {
-  console.log("Server running on http://localhost:3000");
+server.listen(port, () => {
+  console.log(`Server running on ${port}`);
 });
