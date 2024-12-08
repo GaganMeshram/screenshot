@@ -28,6 +28,15 @@ io.on("connection", (socket) => {
   socket.emit("log", "Connected to server.");
 });
 
+// Function to calculate the estimated time
+const getEstimatedTime = (urlPairs) => {
+  const estimatedTimePerURL = 5; // Assume 5 seconds per URL for all devices (adjust as needed)
+  const numUrls = urlPairs.length;
+  const numDevices = Object.keys(viewports).length; // 3 devices (desktop, tablet, mobile)
+  const estimatedTime = numUrls * numDevices * estimatedTimePerURL; // In seconds
+  return estimatedTime;
+};
+
 // Function to read Excel file
 const readExcelFile = (filePath) => {
   const workbook = xlsx.readFile(filePath);
@@ -77,13 +86,19 @@ const captureForAllViewports = async (url, dir, language) => {
       .replace(/\//g, "_")}_${device}.png`;
     const filePath = path.join(deviceDir, fileName);
 
-    if (socketConnection) socketConnection.emit("log", `Capturing ${device} view for ${language}: ${url}`);
+    if (socketConnection)
+      socketConnection.emit(
+        "log",
+        `Capturing ${device} view for ${language}: ${url}`
+      );
     await takeScreenshot(url, viewport, filePath);
   }
 };
 
 // Function to take a screenshot with Puppeteer and ensure page loading
 const takeScreenshot = async (url, viewport, filePath) => {
+  const startTime = Date.now();
+
   const browser = await puppeteer.launch();
   const page = await browser.newPage();
 
@@ -96,11 +111,18 @@ const takeScreenshot = async (url, viewport, filePath) => {
     // Commented out for now, as requested.
     // if (socketConnection) socketConnection.emit("log", `Screenshot captured successfully for: ${url}`);
   } catch (error) {
-    if (socketConnection) socketConnection.emit("log", `Failed to capture screenshot for ${url}: ${error.message}`);
+    if (socketConnection)
+      socketConnection.emit(
+        "log",
+        `Failed to capture screenshot for ${url}: ${error.message}`
+      );
     console.error(`Failed to capture screenshot for ${url}:`, error);
   } finally {
     await browser.close();
   }
+
+  const endTime = Date.now();
+  return (endTime - startTime) / 60000; // Return the time taken in seconds
 };
 
 // Function to zip a folder
@@ -124,10 +146,13 @@ app.post("/start", upload.single("file"), (req, res) => {
   const filePath = req.file.path;
   const urls = readExcelFile(filePath);
 
-  if (socketConnection) socketConnection.emit("log", "Starting screenshot process...");
+  if (socketConnection)
+    socketConnection.emit("log", "Starting screenshot process...");
 
   (async () => {
-    const folderName = `screenshots_${new Date().toISOString().replace(/:/g, "-")}`;
+    const folderName = `screenshots_${new Date()
+      .toISOString()
+      .replace(/:/g, "-")}`;
     const screenshotsDir = path.join(__dirname, folderName);
     const enDir = path.join(screenshotsDir, "EN");
     const esDir = path.join(screenshotsDir, "ES");
@@ -136,14 +161,30 @@ app.post("/start", upload.single("file"), (req, res) => {
     fs.mkdirSync(enDir, { recursive: true });
     fs.mkdirSync(esDir, { recursive: true });
 
+    // Get the estimated time
+    const estimatedTime = getEstimatedTime(urls);
+    if (socketConnection)
+      socketConnection.emit("log", `Estimated time: ${estimatedTime} minutes.`);
+
+    const startTime = Date.now();
+
     // Process URLs for EN and ES
     for (const { enUrl, esUrl } of urls) {
       if (enUrl) await captureForAllViewports(enUrl, enDir, "EN");
       if (esUrl) await captureForAllViewports(esUrl, esDir, "ES");
     }
 
+    const endTime = Date.now();
+    const actualTime = ((endTime - startTime) / 1000).toFixed(2); // In seconds
+    if (socketConnection)
+      socketConnection.emit("log", `Actual time taken: ${actualTime} minutes.`);
+
     const zipPath = await zipFolder(screenshotsDir);
-    if (socketConnection) socketConnection.emit("log", `Process completed. <a href="/download?path=${zipPath}" target="_blank">Download Screenshots</a>`);
+    if (socketConnection)
+      socketConnection.emit(
+        "log",
+        `Process completed. <a href="/download?path=${zipPath}" target="_blank">Download Screenshots</a>`
+      );
   })();
 
   res.send("Process started. Check the logs below.");
